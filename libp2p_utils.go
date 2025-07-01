@@ -11,8 +11,8 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p-core/peer"
-	maddr "github.com/multiformats/go-multiaddr"
+	hostlibp2p "github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/mr-tron/base58" // Correct base58 package import
 )
 
@@ -58,11 +58,19 @@ func LoadOrGenerateKeypair() Keypair {
 		if err != nil {
 			log.Fatal("Error generating keypair: ", err)
 		}
+		privBytes, err := priv.Raw()
+		if err != nil {
+			log.Fatal("Error getting private key bytes: ", err)
+		}
+		pubBytes, err := pub.Raw()
+		if err != nil {
+			log.Fatal("Error getting public key bytes: ", err)
+		}
 		kp := Keypair{
-			Seed:      priv[:],
+			Seed:      privBytes,
 			CreatedAt: time.Now().Format(time.RFC3339),
 			LastUsed:  time.Now().Format(time.RFC3339),
-			PublicKey: pub[:],
+			PublicKey: pubBytes,
 		}
 		_ = os.MkdirAll(keyDir, os.ModePerm)
 		kpStr, err := json.Marshal(kp)
@@ -87,46 +95,46 @@ func getDataDir() string {
 }
 
 // CreateLibp2pNode creates a libp2p node and returns the host and pubsub service
-func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string) (libp2p.Host, *pubsub.PubSub) {
-	priv, pub, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
+func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string) (hostlibp2p.Host, *pubsub.PubSub) {
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
 	if err != nil {
 		log.Fatal("Failed to generate keypair: ", err)
 	}
-	host, err := libp2p.New(
-	    libp2p.DefaultMuxers,
+	h, err := libp2p.New(
+		libp2p.DefaultMuxers,
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)),
 		libp2p.Identity(priv),
 	)
 	if err != nil {
 		log.Fatal("Failed to create libp2p host: ", err)
 	}
-	log.Printf("Libp2p Host created with peer ID: %s", host.ID())
+	log.Printf("Libp2p Host created with peer ID: %s", h.ID())
 
-	pubsubService, err := pubsub.NewGossipSub(ctx, host)
+	pubsubService, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
 		log.Fatal("Failed to create pubsub service: ", err)
 	}
 
 	// Optionally add bootstrap nodes
-    if len(bootstrapList) > 0 {
-    	var peerAddrs []peer.AddrInfo
-    	for _, addr := range bootstrapList {
-    		info, err := peer.AddrInfoFromString(addr)
-    		if err != nil {
-    			log.Printf("Invalid bootstrap addr: %s (%v)", addr, err)
-    			continue
-    		}
-    		peerAddrs = append(peerAddrs, *info)
-    	}
-    	for _, info := range peerAddrs {
-    		if err := host.Connect(ctx, info); err != nil {
-    			log.Printf("Failed to connect to %s: %v", info.ID, err)
-    		} else {
-    			log.Printf("Connected to bootstrap peer: %s", info.ID)
-    		}
-    	}
-    }
-	return host, pubsubService
+	if len(bootstrapList) > 0 {
+		var peerAddrs []peer.AddrInfo
+		for _, addr := range bootstrapList {
+			info, err := peer.AddrInfoFromString(addr)
+			if err != nil {
+				log.Printf("Invalid bootstrap addr: %s (%v)", addr, err)
+				continue
+			}
+			peerAddrs = append(peerAddrs, *info)
+		}
+		for _, info := range peerAddrs {
+			if err := h.Connect(ctx, info); err != nil {
+				log.Printf("Failed to connect to %s: %v", info.ID, err)
+			} else {
+				log.Printf("Connected to bootstrap peer: %s", info.ID)
+			}
+		}
+	}
+	return h, pubsubService
 }
 
 // ToSightDID generates a DID for the node from the public key

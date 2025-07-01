@@ -8,20 +8,20 @@ import (
 	"net/http"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	libp2p "github.com/libp2p/go-libp2p"
+	hostlibp2p "github.com/libp2p/go-libp2p/core/host"
 )
 
 type Libp2pNodeService struct {
-	did         string
-	keypair     Keypair
-	tunnelAPI   string
-	isGateway   bool
-	node        libp2p.Host // Changed to non-pointer
-	pubsub      *pubsub.PubSub
-	subscribed  *pubsub.Subscription
-	topic       *pubsub.Topic
-	bootstrap   []string
-	nodePort    int
+	did        string
+	keypair    Keypair
+	tunnelAPI  string
+	isGateway  bool
+	node       hostlibp2p.Host
+	pubsub     *pubsub.PubSub
+	subscribed *pubsub.Subscription
+	topic      *pubsub.Topic
+	bootstrap  []string
+	nodePort   int
 }
 
 func NewLibp2pNodeService(kp Keypair, port int, tunnelAPI string, isGateway bool, bootstrap []string) *Libp2pNodeService {
@@ -43,8 +43,8 @@ func (s *Libp2pNodeService) InitNode() {
 	ctx := context.Background()
 
 	// Create node and pubsub
-	host, ps := CreateLibp2pNode(ctx, s.nodePort, s.bootstrap)
-	s.node = host // Directly assign, no pointer needed
+	h, ps := CreateLibp2pNode(ctx, s.nodePort, s.bootstrap)
+	s.node = h
 
 	topic, err := ps.Join("sight-message")
 	if err != nil {
